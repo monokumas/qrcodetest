@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>模拟来电</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        /* 背景模糊图 */
+        .bg-image {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80') no-repeat center center/cover;
+            filter: blur(20px) brightness(0.6);
+            z-index: -1;
+        }
+
+        /* 顶部状态栏 */
+        .status-bar {
+            width: 100%;
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 10;
+        }
+
+        /* 中间来电信息区 */
+        .caller-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background-color: #ddd;
+            margin-bottom: 20px;
+            background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80');
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .caller-name {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .caller-number {
+            font-size: 18px;
+            color: rgba(255,255,255,0.8);
+            font-weight: 400;
+        }
+
+        /* 底部按钮区 */
+        .action-buttons {
+            width: 100%;
+            padding: 40px 20px 60px;
+            display: flex;
+            justify-content: space-around;
+            z-index: 10;
+        }
+
+        .btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn:active { transform: scale(0.95); }
+
+        .btn-icon { font-size: 28px; margin-bottom: 5px; }
+        .btn-text { font-size: 12px; font-weight: 500; }
+
+        .btn-answer { background-color: #34c759; color: white; }
+        .btn-reject { background-color: #ff3b30; color: white; }
+
+        /* 隐藏音频元素 */
+        audio { display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- 背景 -->
+    <div class="bg-image"></div>
+
+    <!-- 顶部时间 -->
+    <div class="status-bar">
+        <span id="carrier">中国移动</span>
+        <span id="time">12:00</span>
+        <span id="battery">🔋 100%</span>
+    </div>
+
+    <!-- 来电信息 -->
+    <div class="caller-info">
+        <div class="avatar"></div>
+        <div class="caller-name">母亲</div>
+        <div class="caller-number" id="status-text">正在呼叫...</div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="action-buttons">
+        <!-- 拒绝按钮 -->
+        <div class="btn btn-reject" onclick="handleReject()">
+            <div class="btn-icon">📞</div>
+            <div class="btn-text">挂断</div>
+        </div>
+        <!-- 接听按钮 -->
+        <div class="btn btn-answer" onclick="handleAnswer()">
+            <div class="btn-icon">📞</div>
+            <div class="btn-text">接听</div>
+        </div>
+    </div>
+
+    <!-- 
+      ⚠️⚠️⚠️ 重要：请在此处替换你的音频直链 ⚠️⚠️⚠️ 
+      格式示例：src="https://cdn.jsdelivr.net/gh/你的用户名/仓库名/test.mp3"
+    -->
+    <audio id="callAudio" src="https://cdn.jsdelivr.net/gh/monokumas/qrcodetest/3月15日.mp3" loop preload="auto"></audio>
+
+    <script>
+        // 1. 更新顶部系统时间
+        function updateTime() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            document.getElementById('time').textContent = `${hours}:${minutes}`;
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // 2. 通话计时变量
+        let callTimerInterval = null;
+        let secondsElapsed = 0;
+
+        // 格式化时间 MM:SS
+        function formatTime(totalSeconds) {
+            const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const secs = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${mins}:${secs}`;
+        }
+
+        // 3. 处理接听
+        function handleAnswer() {
+            const audio = document.getElementById('callAudio');
+            
+            // 尝试播放音频
+            audio.play().catch(e => {
+                console.error('播放失败:', e);
+                alert('浏览器拦截了自动播放，请点击页面任意位置后再次点击接听。');
+                return;
+            });
+
+            // 重置并启动计时器
+            secondsElapsed = 0;
+            if (callTimerInterval) clearInterval(callTimerInterval);
+            
+            // 更新界面显示
+            document.querySelector('.caller-name').textContent = "通话中...";
+            const statusDiv = document.getElementById('status-text');
+            statusDiv.textContent = "00:00";
+            statusDiv.id = "call-timer"; // 添加ID以便后续更新
+
+            // 隐藏接听按钮，只保留挂断（可选优化，这里保持原样或微调）
+            // 这里我们简单地把接听按钮变灰或隐藏，为了演示方便，我们只改文字
+            
+            // 启动计时
+            callTimerInterval = setInterval(() => {
+                secondsElapsed++;
+                const timerElement = document.getElementById('call-timer');
+                if (timerElement) {
+                    timerElement.textContent = formatTime(secondsElapsed);
+                }
+            }, 1000);
+        }
+
+        // 4. 处理拒绝/挂断
+        function handleReject() {
+            stopCallResources();
+            document.body.innerHTML = `
+                <div style="display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-size: 1.2rem; background:#000;">
+                    已挂断
+                </div>
+            `;
+            // 2秒后尝试关闭窗口（仅在部分环境有效）
+            setTimeout(() => {
+                if(window.opener) window.close();
+            }, 2000);
+        }
+
+        // 5. 清理资源
+        function stopCallResources() {
+            const audio = document.getElementById('callAudio');
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+            if (callTimerInterval) {
+                clearInterval(callTimerInterval);
+                callTimerInterval = null;
+            }
+            secondsElapsed = 0;
+        }
+    </script>
+</body>
+</html>
