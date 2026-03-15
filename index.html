@@ -193,6 +193,9 @@
 
             // 隐藏接听按钮，只保留挂断（可选优化，这里保持原样或微调）
             // 这里我们简单地把接听按钮变灰或隐藏，为了演示方便，我们只改文字
+
+            // 隐藏接听按钮
+            document.querySelector('.btn-answer').style.display = 'none';
             
             // 启动计时
             callTimerInterval = setInterval(() => {
